@@ -1,5 +1,5 @@
 # api/index.py
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.responses import JSONResponse
 from fastapi_mcp import FastApiMCP
 from typing import List, Any
@@ -101,56 +101,56 @@ async def stats(payload: DataFramePayload):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/build_charts", operation_id="build_charts")
-async def build_charts(payload: ExecuteCodePayload):
+@app.post(
+    "/api/build_charts",
+    operation_id="build_charts",
+    summary="Executes pandas code to generate visualizations",
+    description="This endpoint receives a DataFrame and a list of pandas code operations. It executes each operation to transform data or generate chart configurations (e.g., for ECharts). It returns the results of each operation, ideal for building a dynamic dashboard."
+)
+async def build_charts(payload: ExecuteCodePayload = Body(
+    ...,
+    example={
+        "data_frame": {
+            "data": [
+                {"Car": "Audi", "Volume": 1.6, "Weight": 1250, "CO2": 105},
+                {"Car": "BMW", "Volume": 2.0, "Weight": 1350, "CO2": 115},
+                {"Car": "Volvo", "Volume": 2.0, "Weight": 1450, "CO2": 120},
+                {"Car": "Ford", "Volume": 1.5, "Weight": 1150, "CO2": 99},
+            ],
+            "columns": ["Car", "Volume", "Weight", "CO2"],
+            "shape": [4, 4]
+        },
+        "operations": [
+            {
+                "id": "echarts_scatter_weight_co2",
+                "title": "Scatter Plot: Weight vs CO2",
+                "pandas_code": "{'title': {'text': 'Weight vs CO2 Emissions'}, 'xAxis': {'type': 'value', 'name': 'Weight (kg)'}, 'yAxis': {'type': 'value', 'name': 'CO2 (g/km)'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}"
+            },
+            {
+                "id": "correlation_matrix",
+                "title": "Correlation Matrix",
+                "pandas_code": "df[['Volume', 'Weight', 'CO2']].corr()"
+            }
+        ]
+    }
+)):
     """
+    **MCP Endpoint**
     Receives a DataFrame representation and a list of pandas code operations to execute and build a chart.
 
     The `operations` part of the payload should be a list of objects, where each object represents
-    a pandas operation to be executed on the DataFrame. For example:
+    a pandas operation to be executed on the DataFrame.
 
-    "operations": [
-        {
-            "id": "filter_low_co2",
-            "title": "Filtrar carros con CO2 menor a 100",
-            "pandas_code": "df[df['CO2'] < 100]"
-        },
-        {
-            "id": "correlation_matrix",
-            "title": "Matriz de correlación entre Volume, Weight y CO2",
-            "pandas_code": "df[['Volume', 'Weight', 'CO2']].corr()"
-        },
-        {
-            "id": "sort_by_weight",
-            "title": "Ordenar por peso descendente",
-            "pandas_code": "df.sort_values(by='Weight', ascending=False)"
-        },
-        {
-            "id": "echarts_scatter_weight_co2",
-            "title": "Gráfico de dispersión: Peso vs CO2",
-            "pandas_code": "{'title': {'text': 'Peso vs Emisiones de CO2'}, 'xAxis': {'type': 'value', 'name': 'Peso (kg)'}, 'yAxis': {'type': 'value', 'name': 'CO2 (g/km)'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}"
-        },
-        {
-            "id": "echarts_line_volume_co2",
-            "title": "Gráfico de línea: Volumen vs CO2 ordenado",
-            "pandas_code": "{'title': {'text': 'Volumen vs CO2 (Ordenado por Volumen)'}, 'xAxis': {'type': 'category', 'data': (sorted_df := df.sort_values('Volume'))['Volume'].astype(str).tolist()}, 'yAxis': {'type': 'value'}, 'series': [{'type': 'line', 'data': sorted_df['CO2'].tolist()}]}"
-        },
-        {
-            "id": "echarts_pie_brand_count",
-            "title": "Gráfico de pastel: Conteo por marca",
-            "pandas_code": "{'title': {'text': 'Distribución de Marcas de Autos'}, 'tooltip': {'trigger': 'item'}, 'series': [{'type': 'pie', 'radius': '50%', 'data': [{'value': count, 'name': brand} for brand, count in df['Car'].value_counts().items()]}]}"
-        },
-        {
-            "id": "echarts_histogram_co2",
-            "title": "Histograma: Distribución de CO2",
-            "pandas_code": "{'title': {'text': 'Distribución de Emisiones de CO2'}, 'xAxis': {'type': 'category', 'data': (bins := np.histogram_bin_edges(df['CO2'], bins=10).astype(int).tolist())}, 'yAxis': {'type': 'value'}, 'series': [{'type': 'bar', 'data': np.histogram(df['CO2'], bins=10)[0].tolist()}]}"
-        },
-        {
-            "id": "echarts_heatmap_correlation",
-            "title": "Mapa de calor: Matriz de correlación",
-            "pandas_code": "{'title': {'text': 'Matriz de Correlación'}, 'xAxis': {'type': 'category', 'data': (corr := df[['Volume', 'Weight', 'CO2']].corr()).columns.tolist()}, 'yAxis': {'type': 'category', 'data': corr.index.tolist()}, 'visualMap': {'min': -1, 'max': 1, 'calculable': True}, 'series': [{'type': 'heatmap', 'data': [[i, j, corr.iloc[i, j]] for i in range(len(corr)) for j in range(len(corr))]}]}"
-        }
-    ]
+    The code can either transform the DataFrame (e.g., filtering, sorting) or return a dictionary
+    that represents a chart configuration (e.g., for ECharts).
+
+    - **For DataFrame transformations**, the result will be a JSON representation of the resulting DataFrame.
+    - **For chart configurations**, the result will be the JSON object itself.
+
+    Example Operations:
+    - `df[df['CO2'] < 100]` (Filters the DataFrame)
+    - `df.corr()` (Calculates correlation matrix)
+    - `{'title': {'text': 'Weight vs CO2'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}` (Creates an ECharts scatter plot config)
     """
     try:
         df_data = payload.data_frame
