@@ -29,15 +29,27 @@ class DataFramePayload(BaseModel):
     columns: List[str]
     shape: List[int]
 
+class DataFrameSchemaPayload(BaseModel):
+    columns: List[str]
+    shape: List[int]
+
+class DefineChartsPayload(BaseModel):
+    schema: DataFrameSchemaPayload
+    operations: List[PandasOperation]
+
 class ExecuteCodePayload(BaseModel):
     data_frame: DataFramePayload
+    operations: List[PandasOperation]
+
+class DefineChartsResponse(BaseModel):
+    data_frame: DataFramePayload | None = None # Placeholder
     operations: List[PandasOperation]
 
 class OperationResult(PandasOperation):
     result: Any
 
 class BuildChartsResponse(BaseModel):
-    results: List[OperationResult]
+    results: List[OperationResult | PandasOperation] # Allow both for define_charts
 
 
 app = FastAPI()
@@ -46,7 +58,7 @@ mcp = FastApiMCP(app,
     description="MCP server for data analysis and visualization generation.",
     describe_all_responses=True,
     describe_full_response_schema=True,
-    include_operations=["stats", "build_charts"]
+    include_operations=["define_charts", "read_file", "stats"]
                  )
 
 # Mount the MCP server
@@ -107,6 +119,53 @@ async def stats(payload: DataFramePayload):
         })
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post(
+    "/api/define_charts",
+    operation_id="define_charts",
+    response_model=DefineChartsResponse,
+    summary="Defines pandas code operations to generate chart configurations",
+    description="This endpoint receives a DataFrame schema and a list of pandas code operations. It validates the structure and returns a payload template with the same operations, ready to be sent to /api/build_charts after adding the data. It's ideal for preparing a dynamic dashboard build request."
+)
+async def define_charts(payload: DefineChartsPayload = Body(
+    ...,
+    example={
+        "schema": {
+            "columns": ["Car", "Volume", "Weight", "CO2"],
+            "shape": [36, 4]
+        },
+        "operations": [
+            {
+                "id": "echarts_scatter_weight_co2",
+                "title": "Scatter Plot: Weight vs CO2",
+                "pandas_code": "{'title': {'text': 'Weight vs CO2 Emissions'}, 'xAxis': {'type': 'value', 'name': 'Weight (kg)'}, 'yAxis': {'type': 'value', 'name': 'CO2 (g/km)'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}"
+            }
+        ]
+    }
+)):
+    """
+    Receives a DataFrame schema and a list of pandas code operations to define a chart build request.
+
+    The `operations` part of the payload should be a list of objects, where each object represents
+    a pandas operation to be executed later by the `build_charts` endpoint.
+
+    The code can either transform the DataFrame (e.g., filtering, sorting) or return a dictionary
+    that represents a chart configuration (e.g., for ECharts).
+
+    - **For DataFrame transformations**, the result will be a JSON representation of the resulting DataFrame.
+    - **For chart configurations**, the result will be the JSON object itself.
+
+    Example Operations:
+    - `df[df['CO2'] < 100]` (Filters the DataFrame)
+    - `df.corr()` (Calculates correlation matrix)
+    - `{'title': {'text': 'Weight vs CO2'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}` (Creates an ECharts scatter plot config)
+    """
+    return {
+        # The data_frame is returned as null. The client should replace this with the actual DataFrame.
+        "data_frame": None,
+        "operations": payload.operations
+    }
+
 
 @app.post(
     "/api/build_charts",
