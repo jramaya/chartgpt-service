@@ -49,7 +49,7 @@ class OperationResult(PandasOperation):
     result: Any
 
 class BuildChartsResponse(BaseModel):
-    results: List[OperationResult | PandasOperation] # Allow both for define_charts
+    results: List[OperationResult | PandasOperation] # Allow both for define_charts_template
 
 
 app = FastAPI()
@@ -58,7 +58,7 @@ mcp = FastApiMCP(app,
     description="MCP server for data analysis and visualization generation.",
     describe_all_responses=True,
     describe_full_response_schema=True,
-    include_operations=["define_charts", "read_file", "stats"]
+    include_operations=["define_charts_template", "read_file", "stats"]
                  )
 
 # Mount the MCP server
@@ -121,13 +121,13 @@ async def stats(payload: DataFramePayload):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post(
-    "/api/define_charts",
-    operation_id="define_charts",
+    "/api/define_charts_template",
+    operation_id="define_charts_template",
     response_model=DefineChartsResponse,
     summary="Defines pandas code operations to generate chart configurations",
     description="This endpoint receives a DataFrame schema and a list of pandas code operations. It validates the structure and returns a payload template with the same operations, ready to be sent to /api/build_charts after adding the data. It's ideal for preparing a dynamic dashboard build request."
 )
-async def define_charts(payload: DefineChartsPayload = Body(
+async def define_charts_template(payload: DefineChartsPayload = Body(
     ...,
     example={
         "schema": {
