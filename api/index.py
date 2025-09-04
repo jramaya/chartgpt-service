@@ -89,3 +89,51 @@ async def stats(payload: DataFramePayload):
         })
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/build_charts")
+async def build_charts(payload: ExecuteCodePayload):
+    """
+    Receives a DataFrame representation and a list of pandas code operations to execute and build a chart.
+
+    The `operations` part of the payload should be a list of objects, where each object represents
+    a pandas operation to be executed on the DataFrame. For example:
+
+    "operations": [
+        {
+            "id": "filter_low_co2",
+            "title": "Filtrar carros con CO2 menor a 100",
+            "pandas_code": "df[df['CO2'] < 100]"
+        },
+        {
+            "id": "correlation_matrix",
+            "title": "Matriz de correlación entre Volume, Weight y CO2",
+            "pandas_code": "df[['Volume', 'Weight', 'CO2']].corr()"
+        },
+        {
+            "id": "sort_by_weight",
+            "title": "Ordenar por peso descendente",
+            "pandas_code": "df.sort_values(by='Weight', ascending=False)"
+        }
+    ]
+    """
+    try:
+        df_data = payload.data_frame
+        # Convert Pydantic models to dicts for execute_pandas_code
+        operations = [op.model_dump() for op in payload.operations]
+
+        # Recreate DataFrame from payload
+        inner_data = df_data.data
+        columns = df_data.columns
+        if isinstance(inner_data, list) and inner_data and isinstance(inner_data[0], dict):
+            df = pd.DataFrame(inner_data)
+        else:
+            df = pd.DataFrame(inner_data, columns=columns)
+
+        # Execute the pandas code for each operation
+        results = execute_pandas_code(df, operations)
+
+        return JSONResponse(content={"results": results})
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
