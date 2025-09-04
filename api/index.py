@@ -1,12 +1,32 @@
 # api/index.py
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
-from typing import Dict, List, Any
+from typing import List, Any
+from pydantic import BaseModel
 import pandas as pd
 import io
 import json
 import numpy as np
 import logging
+
+from src.utils.execute_pandas import execute_pandas_code
+
+
+# --- Pydantic Models for Request Validation ---
+
+class PandasOperation(BaseModel):
+    id: str | int
+    title: str
+    pandas_code: str
+
+class DataFramePayload(BaseModel):
+    data: List[Any]
+    columns: List[str]
+    shape: List[int]
+
+class ExecuteCodePayload(BaseModel):
+    data_frame: DataFramePayload
+    operations: List[PandasOperation]
 
 app = FastAPI()
 
@@ -36,16 +56,12 @@ async def read_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/stats")
-async def stats(data: Dict[str, Any]):
+async def stats(payload: DataFramePayload):
     """Generate descriptive statistics for the provided data."""
     try:
-        # Assume input is a single dict with 'data', 'columns', 'shape'
-        if not all(key in data for key in ['data', 'columns', 'shape']):
-            raise ValueError("Input must contain 'data', 'columns', and 'shape' keys.")
-        
-        inner_data = data['data']
-        columns = data['columns']
-        expected_shape = tuple(data['shape'])
+        inner_data = payload.data
+        columns = payload.columns
+        expected_shape = tuple(payload.shape)
         
         # Create DataFrame based on the type of inner_data
         if isinstance(inner_data, list) and inner_data and isinstance(inner_data[0], dict):
