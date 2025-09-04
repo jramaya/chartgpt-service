@@ -114,6 +114,31 @@ async def build_charts(payload: ExecuteCodePayload):
             "id": "sort_by_weight",
             "title": "Ordenar por peso descendente",
             "pandas_code": "df.sort_values(by='Weight', ascending=False)"
+        },
+        {
+            "id": "echarts_scatter_weight_co2",
+            "title": "Gráfico de dispersión: Peso vs CO2",
+            "pandas_code": "{'title': {'text': 'Peso vs Emisiones de CO2'}, 'xAxis': {'type': 'value', 'name': 'Peso (kg)'}, 'yAxis': {'type': 'value', 'name': 'CO2 (g/km)'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}"
+        },
+        {
+            "id": "echarts_line_volume_co2",
+            "title": "Gráfico de línea: Volumen vs CO2 ordenado",
+            "pandas_code": "{'title': {'text': 'Volumen vs CO2 (Ordenado por Volumen)'}, 'xAxis': {'type': 'category', 'data': (sorted_df := df.sort_values('Volume'))['Volume'].astype(str).tolist()}, 'yAxis': {'type': 'value'}, 'series': [{'type': 'line', 'data': sorted_df['CO2'].tolist()}]}"
+        },
+        {
+            "id": "echarts_pie_brand_count",
+            "title": "Gráfico de pastel: Conteo por marca",
+            "pandas_code": "{'title': {'text': 'Distribución de Marcas de Autos'}, 'tooltip': {'trigger': 'item'}, 'series': [{'type': 'pie', 'radius': '50%', 'data': [{'value': count, 'name': brand} for brand, count in df['Car'].value_counts().items()]}]}"
+        },
+        {
+            "id": "echarts_histogram_co2",
+            "title": "Histograma: Distribución de CO2",
+            "pandas_code": "{'title': {'text': 'Distribución de Emisiones de CO2'}, 'xAxis': {'type': 'category', 'data': (bins := np.histogram_bin_edges(df['CO2'], bins=10).astype(int).tolist())}, 'yAxis': {'type': 'value'}, 'series': [{'type': 'bar', 'data': np.histogram(df['CO2'], bins=10)[0].tolist()}]}"
+        },
+        {
+            "id": "echarts_heatmap_correlation",
+            "title": "Mapa de calor: Matriz de correlación",
+            "pandas_code": "{'title': {'text': 'Matriz de Correlación'}, 'xAxis': {'type': 'category', 'data': (corr := df[['Volume', 'Weight', 'CO2']].corr()).columns.tolist()}, 'yAxis': {'type': 'category', 'data': corr.index.tolist()}, 'visualMap': {'min': -1, 'max': 1, 'calculable': True}, 'series': [{'type': 'heatmap', 'data': [[i, j, corr.iloc[i, j]] for i in range(len(corr)) for j in range(len(corr))]}]}"
         }
     ]
     """
@@ -130,10 +155,18 @@ async def build_charts(payload: ExecuteCodePayload):
         else:
             df = pd.DataFrame(inner_data, columns=columns)
 
-        # Execute the pandas code for each operation
-        results = execute_pandas_code(df, operations)
+        # Execute the pandas code for each operation. If an operation fails, it's skipped.
+        results = []
+        for op in operations:
+            try:
+                # Pass a copy of the DataFrame to prevent side effects between operations
+                result = execute_pandas_code(df.copy(), op)
+                results.append(result)
+            except Exception as e:
+                logging.warning(f"Skipping operation {op.get('id', 'N/A')} due to an error: {e}")
 
         return JSONResponse(content={"results": results})
 
     except Exception as e:
+        logging.error(f"An unexpected error occurred in build_charts: {e}")
         raise HTTPException(status_code=400, detail=str(e))
