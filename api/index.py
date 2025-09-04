@@ -45,9 +45,9 @@ mcp = FastApiMCP(app,
 # Mount the MCP server
 mcp.mount()
 
-@app.get("/api/hello")
-def hello_world():
-    return {"message": "Hola desde el backend de Python en Vercel!"}
+@app.get("/api/ping")
+def ping():
+    return {"ping ": "From Instant Analysis MCP"}
 
 @app.post("/api/read_file", operation_id="read_file")
 async def read_file(file: UploadFile = File(...)):
