@@ -143,7 +143,6 @@ async def build_charts(payload: ExecuteCodePayload = Body(
     }
 )):
     """
-    **MCP Endpoint**
     Receives a DataFrame representation and a list of pandas code operations to execute and build a chart.
 
     The `operations` part of the payload should be a list of objects, where each object represents
