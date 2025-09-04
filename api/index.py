@@ -5,6 +5,7 @@ from typing import Dict, List, Any
 import pandas as pd
 import io
 import json
+import numpy as np
 import logging
 
 app = FastAPI()
@@ -124,11 +125,25 @@ async def stats(data: Dict[str, Any]):
         except Exception as e:
             logging.error(f"Error generating data frame sample: {e}")
             # Return empty list on failure to maintain type consistency
-            data_frame_sample = []
+            data_frame_sample = {"error": f"Could not generate data frame sample: {e}"}
+
+        # --- Generate correlation matrix ---
+        correlation = {}
+        try:
+            # Select only numeric columns for correlation
+            numeric_df = df.select_dtypes(include=np.number)
+            if not numeric_df.empty:
+                corr_matrix = numeric_df.corr()
+                # Fill NaN with null for JSON serialization, then convert to dict
+                correlation = json.loads(corr_matrix.to_json(orient='index'))
+        except Exception as e:
+            logging.error(f"Error generating correlation matrix: {e}")
+            correlation = {"error": f"Could not generate correlation matrix: {e}"}
         
         return JSONResponse(content={
             "info": info,
             "describe": describe,
+            "correlation": correlation,
             "dataFrameSample": data_frame_sample
         })
     except Exception as e:
