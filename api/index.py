@@ -1,6 +1,7 @@
 # api/index.py
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi_mcp import FastApiMCP
 from typing import List, Any
 from pydantic import BaseModel
 import pandas as pd
@@ -33,12 +34,22 @@ class ExecuteCodePayload(BaseModel):
     operations: List[PandasOperation]
 
 app = FastAPI()
+mcp = FastApiMCP(app,
+    name="Instant Analysis MCP",
+    description="MCP server for data analysis and visualization generation.",
+    describe_all_responses=True,
+    describe_full_response_schema=True,
+    include_operations=["stats", "build_charts"]
+                 )
+
+# Mount the MCP server
+mcp.mount()
 
 @app.get("/api/hello")
 def hello_world():
     return {"message": "Hola desde el backend de Python en Vercel!"}
 
-@app.post("/api/read_file")
+@app.post("/api/read_file", operation_id="read_file")
 async def read_file(file: UploadFile = File(...)):
     """Read a CSV or Excel file and return its contents as JSON."""
     filename = file.filename
@@ -59,7 +70,7 @@ async def read_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/stats")
+@app.post("/api/stats", operation_id="stats")
 async def stats(payload: DataFramePayload):
     """Generate descriptive statistics for the provided data."""
     try:
@@ -90,8 +101,7 @@ async def stats(payload: DataFramePayload):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-@app.post("/api/build_charts")
+@app.post("/api/build_charts", operation_id="build_charts")
 async def build_charts(payload: ExecuteCodePayload):
     """
     Receives a DataFrame representation and a list of pandas code operations to execute and build a chart.
