@@ -33,6 +33,13 @@ class ExecuteCodePayload(BaseModel):
     data_frame: DataFramePayload
     operations: List[PandasOperation]
 
+class OperationResult(PandasOperation):
+    result: Any
+
+class BuildChartsResponse(BaseModel):
+    results: List[OperationResult]
+
+
 app = FastAPI()
 mcp = FastApiMCP(app,
     name="Instant Analysis MCP",
@@ -104,7 +111,8 @@ async def stats(payload: DataFramePayload):
 @app.post(
     "/api/build_charts",
     operation_id="build_charts",
-    summary="Executes pandas code to generate visualizations",
+    response_model=BuildChartsResponse,
+    summary="Executes pandas code to generate chart configurations",
     description="This endpoint receives a DataFrame and a list of pandas code operations. It executes each operation to transform data or generate chart configurations (e.g., for ECharts). It returns the results of each operation, ideal for building a dynamic dashboard."
 )
 async def build_charts(payload: ExecuteCodePayload = Body(
@@ -175,7 +183,7 @@ async def build_charts(payload: ExecuteCodePayload = Body(
             except Exception as e:
                 logging.warning(f"Skipping operation {op.get('id', 'N/A')} due to an error: {e}")
 
-        return JSONResponse(content={"results": results})
+        return {"results": results}
 
     except Exception as e:
         logging.error(f"An unexpected error occurred in build_charts: {e}")
