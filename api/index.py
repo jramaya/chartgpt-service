@@ -12,12 +12,19 @@ app = FastAPI()
 def hello_world():
     return {"message": "Hola desde el backend de Python en Vercel!"}
 
-@app.post("/api/read_csv")
-async def read_csv(file: UploadFile = File(...)):
-    """Read a CSV file and return its contents as JSON."""
+@app.post("/api/read_file")
+async def read_file(file: UploadFile = File(...)):
+    """Read a CSV or Excel file and return its contents as JSON."""
+    filename = file.filename
     try:
         content = await file.read()
-        df = pd.read_csv(io.StringIO(content.decode('utf-8')))
+        if filename.endswith('.csv'):
+            df = pd.read_csv(io.StringIO(content.decode('utf-8')))
+        elif filename.endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(io.BytesIO(content))
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file type. Please upload a CSV or Excel file.")
+
         return JSONResponse(content={
             "data": json.loads(df.to_json(orient='records')),
             "columns": df.columns.tolist(),
