@@ -6,11 +6,15 @@ from pydantic import BaseModel
 import pandas as pd
 import io
 import json
-import numpy as np
 import logging
 
 from src.utils.execute_pandas import execute_pandas_code
-
+from src.utils.stats import (
+    generate_info,
+    generate_describe,
+    generate_correlation,
+    generate_data_frame_sample
+)
 
 # --- Pydantic Models for Request Validation ---
 
@@ -77,90 +81,11 @@ async def stats(payload: DataFramePayload):
         if list(df.columns) != columns:
             df.columns = columns
         
-        # --- Generate info ---
-        info = {}
-        try:
-            if not df.empty:
-                # Basic info
-                info["class"] = df.__class__.__name__
-                info["shape"] = list(df.shape)
-                
-                # Index info
-                info["index"] = {
-                    "type": str(df.index.__class__.__name__),
-                    "start": df.index[0],
-                    "stop": df.index[-1] + 1 if isinstance(df.index, pd.RangeIndex) else None,
-                    "step": df.index.step if hasattr(df.index, 'step') else 1
-                }
-                
-                # Columns info
-                column_info = []
-                for col in df.columns:
-                    column_info.append({
-                        "name": col,
-                        "dtype": str(df[col].dtype),
-                        "non_null": int(df[col].count()),
-                        "null": int(df[col].isnull().sum()),
-                        "unique": df[col].nunique(),
-                        "memory_usage_bytes": int(df[col].memory_usage(deep=True))
-                    })
-                info["columns"] = column_info
-                
-                # Dtypes summary
-                dtypes_summary = df.dtypes.value_counts().to_dict()
-                info["dtypes_summary"] = {str(k): int(v) for k, v in dtypes_summary.items()}
-        except Exception as e:
-            logging.error(f"Error generating info stats: {e}")
-            info = {"error": f"Could not generate info stats: {e}"}
-
-        # --- Generate describe ---
-        describe = {}
-        try:
-            desc_df = df.describe(include='all').fillna("N/A")
-            desc_dict = desc_df.to_dict()
-            for col in df.columns:
-                if col in desc_dict:
-                    col_desc = desc_dict[col]
-                    # Convertir valores a tipos serializables (ej. numpy float/int a Python nativo)
-                    col_desc = {k: (float(v) if isinstance(v, (int, float)) and k in ['mean', 'std', 'min', '25%', '50%', '75%', 'max'] else 
-                                    int(v) if isinstance(v, (int, float)) and k in ['count', 'unique', 'freq'] else 
-                                    str(v) if k == 'top' or v == "N/A" else v) 
-                                for k, v in col_desc.items()}
-                    describe[col] = col_desc
-                else:
-                    describe[col] = {}
-        except Exception as e:
-            logging.error(f"Error generating describe stats: {e}")
-            describe = {"error": f"Could not generate describe stats: {e}"}
-
-        # --- Generate dataFrameSample ---
-        data_frame_sample = []
-        try:
-            if not df.empty:
-                data_frame_sample = json.loads(df.head().to_json(orient='records'))
-        except Exception as e:
-            logging.error(f"Error generating data frame sample: {e}")
-            # Return empty list on failure to maintain type consistency
-            data_frame_sample = {"error": f"Could not generate data frame sample: {e}"}
-
-        # --- Generate correlation matrix ---
-        correlation = {}
-        try:
-            # Select only numeric columns for correlation
-            numeric_df = df.select_dtypes(include=np.number)
-            if not numeric_df.empty:
-                corr_matrix = numeric_df.corr()
-                # Fill NaN with null for JSON serialization, then convert to dict
-                correlation = json.loads(corr_matrix.to_json(orient='index'))
-        except Exception as e:
-            logging.error(f"Error generating correlation matrix: {e}")
-            correlation = {"error": f"Could not generate correlation matrix: {e}"}
-        
         return JSONResponse(content={
-            "info": info,
-            "describe": describe,
-            "correlation": correlation,
-            "dataFrameSample": data_frame_sample
+            "info": generate_info(df),
+            "describe": generate_describe(df),
+            "correlation": generate_correlation(df),
+            "dataFrameSample": generate_data_frame_sample(df)
         })
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
