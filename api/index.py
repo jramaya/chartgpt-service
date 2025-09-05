@@ -12,7 +12,7 @@ import os
 import openai
 import logging
 
-from src.utils.execute_pandas import execute_pandas_code
+from src.utils.execute_pandas import execute_pandas_operation
 from src.utils.stats import (
     generate_info,
     generate_describe,
@@ -25,10 +25,10 @@ from src.utils.prompt_generators import (
 
 # --- Pydantic Models for Request Validation ---
 
-class PandasOperation(BaseModel):
+class ChartConfiguration(BaseModel):
     id: str | int
     title: str
-    pandas_code: str
+    pandas_operation: str
 
 class DataFramePayload(BaseModel):
     data: List[dict]
@@ -69,18 +69,18 @@ class StatsPayload(BaseModel):
     correlation: dict
     dataFrameSample: List[dict] | DataFrameSamplePayload # Allow both formats
 
-class ExecuteCodePayload(BaseModel):
+class DataFramePandasOperation(BaseModel):
     data_frame: DataFramePayload
-    operations: List[PandasOperation]
+    operations: List[ChartConfiguration]
 
 class GenerateChartsConfigurationsResponse(BaseModel):
-    operations: List[PandasOperation]
+    operations: List[ChartConfiguration]
 
-class OperationResult(PandasOperation):
+class OperationResult(ChartConfiguration):
     result: Any
 
 class BuildChartsResponse(BaseModel):
-    results: List[OperationResult | PandasOperation] # Allow both for define_charts_template
+    results: List[OperationResult | ChartConfiguration] # Allow both for define_charts_template
 
 # --- Enums for Query Parameters ---
 class ChartsBackend(str, Enum):
@@ -185,7 +185,7 @@ async def generate_charts_configurations(
     - It takes a `charts_backend` query parameter to specify the desired charting library.
     - It constructs a system prompt tailored to the selected backend.
     - It calls an AI model (e.g., OpenAI's GPT) to generate a list of operations.
-    - Each operation contains the `pandas_code` needed to produce a chart configuration
+    - Each operation contains the `pandas_operation` needed to produce a chart configuration
       (like an ECharts option object) that can be executed by the `/api/build_charts` endpoint.
     """
     if not client:
@@ -215,7 +215,7 @@ async def generate_charts_configurations(
                             "type": "string",
                             "description": "A concise and descriptive title for the chart (e.g., 'CO2 Emissions vs. Vehicle Weight')."
                         },
-                        "pandas_code": {
+                        "pandas_operation": {
                             "type": "string",
                             "description": "A string of Python code that will be executed to generate an ECharts configuration dictionary. The code has access to a pandas DataFrame called `df`."
                         },
@@ -224,7 +224,7 @@ async def generate_charts_configurations(
                             "description": "A brief, insightful comment about what the chart reveals from the data."
                         }
                     },
-                    "required": ["title", "pandas_code", "insight"]
+                    "required": ["title", "pandas_operation", "insight"]
                 }
             }
         }
@@ -252,8 +252,8 @@ async def generate_charts_configurations(
         operations = []
         for tool_call in response.choices[0].message.tool_calls or []:
             args = json.loads(tool_call.function.arguments)
-            pandas_code = args['pandas_code']
-            operations.append({"id": tool_call.id, "title": args['title'], "pandas_code": pandas_code})
+            pandas_operation = args['pandas_operation']
+            operations.append({"id": tool_call.id, "title": args['title'], "pandas_operation": pandas_operation})
 
         return {"operations": operations}
     except Exception as e:
@@ -268,7 +268,7 @@ async def generate_charts_configurations(
     summary="Executes pandas code to generate chart configurations",
     description="This endpoint receives a DataFrame and a list of pandas code operations. It executes each operation to transform data or generate chart configurations (e.g., for ECharts). It returns the results of each operation, ideal for building a dynamic dashboard."
 )
-async def build_charts(payload: ExecuteCodePayload = Body(
+async def build_charts(payload: DataFramePandasOperation = Body(
     ...,
     example={
         "data_frame": {
@@ -285,12 +285,12 @@ async def build_charts(payload: ExecuteCodePayload = Body(
             {
                 "id": "echarts_scatter_weight_co2",
                 "title": "Scatter Plot: Weight vs CO2",
-                "pandas_code": "{'title': {'text': 'Weight vs CO2 Emissions'}, 'xAxis': {'type': 'value', 'name': 'Weight (kg)'}, 'yAxis': {'type': 'value', 'name': 'CO2 (g/km)'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}"
+                "pandas_operation": "{'title': {'text': 'Weight vs CO2 Emissions'}, 'xAxis': {'type': 'value', 'name': 'Weight (kg)'}, 'yAxis': {'type': 'value', 'name': 'CO2 (g/km)'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}"
             },
             {
                 "id": "correlation_matrix",
                 "title": "Correlation Matrix",
-                "pandas_code": "df[['Volume', 'Weight', 'CO2']].corr()"
+                "pandas_operation": "df[['Volume', 'Weight', 'CO2']].corr()"
             }
         ]
     }
@@ -314,7 +314,7 @@ async def build_charts(payload: ExecuteCodePayload = Body(
     """
     try:
         df_data = payload.data_frame
-        # Convert Pydantic models to dicts for execute_pandas_code
+        # Convert Pydantic models to dicts for execute_pandas_operation
         operations = [op.model_dump() for op in payload.operations]
 
         # Recreate DataFrame from payload
@@ -330,7 +330,7 @@ async def build_charts(payload: ExecuteCodePayload = Body(
         for op in operations:
             try:
                 # Pass a copy of the DataFrame to prevent side effects between operations
-                result = execute_pandas_code(df.copy(), op)
+                result = execute_pandas_operation(df.copy(), op)
                 results.append(result)
             except Exception as e:
                 logging.warning(f"Skipping operation {op.get('id', 'N/A')} due to an error: {e}")

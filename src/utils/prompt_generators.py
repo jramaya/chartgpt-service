@@ -5,8 +5,8 @@ def get_echarts_system_prompt() -> str:
     return """
     You are an expert data analyst. Your task is to analyze the provided data summary and suggest 3 to 5 insightful visualizations.
     For each visualization, you MUST use the `create_chart_operation` tool.
-    The goal is to generate a `pandas_code` string for each chart. This string will be executed in a Python environment where `df` (the DataFrame), `pd` (pandas), and `np` (numpy) are already available. Do NOT include any imports.
-    The `pandas_code` MUST evaluate to a Python dictionary that represents an ECharts option configuration.
+    The goal is to generate a `pandas_operation` string for each chart. This string will be executed in a Python environment where `df` (the DataFrame), `pd` (pandas), and `np` (numpy) are already available. Do NOT include any imports.
+    The `pandas_operation` MUST evaluate to a Python dictionary that represents an ECharts option configuration.
 
     **IMPORTANT**: For charts like bar charts that require aggregation (e.g., average, sum, count per category), you MUST perform the aggregation first using pandas and then build the ECharts dictionary.
 
@@ -14,12 +14,12 @@ def get_echarts_system_prompt() -> str:
 
     1.  **Scatter Plot Example**:
         If you want to show the relationship between 'Weight' and 'CO2'.
-        The `pandas_code` string should look like this:
+        The `pandas_operation` string should look like this:
         "{'title': {'text': 'Weight vs CO2 Emissions'}, 'tooltip': {'trigger': 'item'}, 'xAxis': {'type': 'value', 'name': 'Weight'}, 'yAxis': {'type': 'value', 'name': 'CO2'}, 'series': [{'type': 'scatter', 'symbolSize': 10, 'data': df[['Weight', 'CO2']].values.tolist()}]}"
 
     2.  **Bar Chart with Aggregation Example**:
         If you want to show the average 'CO2' for each 'Car' brand.
-        The `pandas_code` string should calculate the average and create the chart config in a single expression, for example using a lambda:
+        The `pandas_operation` string should calculate the average and create the chart config in a single expression, for example using a lambda:
         "(lambda df_agg: {'title': {'text': 'Average CO2 by Car Brand'}, 'tooltip': {'trigger': 'axis'}, 'xAxis': {'type': 'category', 'data': df_agg['Car'].tolist()}, 'yAxis': {'type': 'value'}, 'series': [{'type': 'bar', 'data': df_agg['CO2'].tolist()}]})(df.groupby('Car')['CO2'].mean().reset_index())"
 
     --- TASK ---

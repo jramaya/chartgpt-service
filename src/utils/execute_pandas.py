@@ -4,13 +4,13 @@ import numpy as np
 import json
 import logging
 
-def execute_pandas_code(df: pd.DataFrame, operation: dict) -> dict:
+def execute_pandas_operation(df: pd.DataFrame, operation: dict) -> dict:
     """
     Executes a single pandas code snippet on a DataFrame.
 
     Args:
         df (pd.DataFrame): The DataFrame to run the code on.
-        operation (dict): A dict with 'id', 'title', 'pandas_code'.
+        operation (dict): A dict with 'id', 'title', 'pandas_operation'.
 
     Returns:
         dict: The operation with an added 'result' key.
@@ -20,7 +20,7 @@ def execute_pandas_code(df: pd.DataFrame, operation: dict) -> dict:
     """
     result_obj = operation.copy()
     try:
-        result = eval(operation['pandas_code'], {'pd': pd, 'df': df, 'np': np})
+        result = eval(operation['pandas_operation'], {'pd': pd, 'df': df, 'np': np})
 
         if isinstance(result, (pd.DataFrame, pd.Series)):
             result_json = json.loads(result.to_json(orient='split' if isinstance(result, pd.DataFrame) else 'records'))
@@ -30,5 +30,5 @@ def execute_pandas_code(df: pd.DataFrame, operation: dict) -> dict:
         result_obj['result'] = result_json
         return result_obj
     except Exception as e:
-        logging.error(f"Error executing pandas code for id {operation.get('id')}: {operation.get('pandas_code')}. Error: {e}")
+        logging.error(f"Error executing pandas code for id {operation.get('id')}: {operation.get('pandas_operation')}. Error: {e}")
         raise  # Re-raise the exception to be handled by the caller
