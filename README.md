@@ -1,32 +1,70 @@
-# Creador de Dashboards con IA "Análisis al Instante"
+# ChartGPT Service
 
-## Visión del Proyecto
-Crear una aplicación web que le permita a cualquier usuario convertirse en un analista de datos. El usuario podrá subir una hoja de cálculo (.xlsx o .csv), y la aplicación usará Inteligencia Artificial para analizar los datos, sugerir visualizaciones impactantes y ayudarle a construir un dashboard simple y elegante en segundos.
+## About The Project
 
-## El Problema Central
-Innumerables profesionales tienen datos valiosos atrapados en hojas de cálculo, pero carecen del tiempo o la experiencia para explorarlos. Esta herramienta cerrará esa brecha, proporcionando análisis instantáneos impulsados por IA sin necesidad de un software de BI (Business Intelligence) complejo.
+This project is a web application that empowers users to become data analysts instantly. By uploading a spreadsheet (`.xlsx` or `.csv`), the application uses AI to analyze the data, suggest impactful visualizations, and help build a simple, elegant dashboard in seconds.
 
-## Características y Requisitos Clave
+The goal is to unlock the value trapped in spreadsheets for professionals who lack the time or expertise for complex data exploration, providing instant insights without the need for traditional BI software.
 
-### 1. Frontend (React)
-- Construye una interfaz de usuario (UI) limpia, moderna e intuitiva. Una single-page application es perfecta para esto.
-- Implementa un componente para subir archivos (la funcionalidad de drag-and-drop es un plus) que acepte formatos .xlsx y .csv.
-- Mientras el backend procesa el archivo, muestra un estado de carga atractivo que le informe al usuario que la IA está "analizando sus datos".
-- Una vez que el análisis esté completo, muestra las sugerencias generadas por la IA como "Tarjetas de Análisis" interactivas. Cada tarjeta debe contener:
-  - El título del gráfico sugerido (ej. "Distribución de Ventas por Región").
-  - Un análisis breve generado por la IA (ej. "Este gráfico revela que la región 'Norte' es la de mayor rendimiento.").
-  - Un botón de "Agregar al Dashboard".
-- Crea una cuadrícula de dashboard flexible donde se rendericen los gráficos seleccionados. Usa una librería de gráficos como Recharts, Chart.js, o D3.
+For a more detailed project brief and requirements, please review the **`CHALLENGE.md`** file.
 
-### 2. Backend (Python - usando Flask o FastAPI)
-- Desarrolla un endpoint de API robusto para la carga de archivos. Utiliza la librería pandas para procesar la hoja de cálculo y convertirla en un DataFrame.
-- Implementa la lógica central de IA:
-  - Del DataFrame, extrae los nombres de las columnas, los tipos de datos y un resumen estadístico (ej. usando `df.describe()` y `df.info()`).
-  - Envía este esquema y resumen a un Modelo de Lenguaje Grande (LLM).
-  - Diseña el prompt para la IA para que actúe como un analista de datos experto. Pídele que identifique los patrones o relaciones más interesantes en los datos y sugiera de 3 a 5 visualizaciones específicas para destacarlos.
-  - La IA debe devolver un arreglo JSON estructurado. Cada objeto en el arreglo representará un gráfico sugerido y contendrá las siguientes claves:
-    - `title`: Título del gráfico.
-    - `chart_type`: Tipo de gráfico (ej. bar, line, pie, scatter).
-    - `parameters`: Un objeto que especifique las columnas a usar, como `{"x_axis": "Categoría", "y_axis": "Valor"}`.
-    - `insight`: Un breve análisis en formato de texto.
-- Crea un segundo endpoint que el frontend pueda llamar para obtener los datos necesarios para un gráfico específico. Este endpoint recibirá los `parameters` del gráfico y devolverá los datos ya agregados y formateados, listos para ser visualizados. Esto evita enviar todo el conjunto de datos crudos al cliente.
+## Built With
+
+- **Frontend**: React
+- **Backend**: Python with FastAPI
+- **Data Analysis**: Pandas
+- **Artificial Intelligence**: OpenAI (GPT)
+- **Data Visualization**: ECharts (configurable for others like D3.js)
+
+## Getting Started
+
+Follow these steps to set up and run the project in your local environment.
+
+### Prerequisites
+
+- Python 3.10 or higher
+- Node.js and npm (for the React frontend)
+- An OpenAI API Key
+
+### 1. Backend Setup (Python/FastAPI)
+
+First, clone the repository and navigate to the project directory:
+
+```bash
+git clone <YOUR_REPOSITORY_URL>
+cd chartgpt-service
+```
+
+Crea y activa un entorno virtual. Usar un entorno virtual es una buena práctica para aislar las dependencias del proyecto.
+
+```bash
+python3.10 -m venv venv
+source venv/bin/activate
+```
+
+Instala las dependencias de Python desde el archivo `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Variables de Entorno
+
+Para que la integración con OpenAI funcione, necesitas configurar tu clave de API. Crea un archivo `.env` en la raíz del proyecto y añade tu clave:
+
+```
+OPENAI_API_KEY="tu_clave_secreta_de_openai_aqui"
+```
+
+### 3. Ejecutar el Servidor de Desarrollo
+
+Una vez que las dependencias estén instaladas y la variable de entorno configurada, puedes iniciar el servidor de FastAPI. El `--reload` hará que el servidor se reinicie automáticamente cada vez que hagas cambios en el código.
+
+```bash
+uvicorn api.index:app --reload
+```
+
+El backend ahora estará corriendo en `http://127.0.0.1:8000`.
+
+---
+*Nota: Las instrucciones para configurar y ejecutar el frontend de React deberán ser añadidas por separado.*
