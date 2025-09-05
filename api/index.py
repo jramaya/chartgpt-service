@@ -27,15 +27,43 @@ class PandasOperation(BaseModel):
     pandas_code: str
 
 class DataFramePayload(BaseModel):
-    data: List[Any]
+    data: List[dict]
+    columns: List[str]
+    shape: List[int]
+
+# --- Pydantic Models for Stats Payload ---
+
+class InfoIndex(BaseModel):
+    type: str
+    start: int
+    stop: int
+    step: int
+
+class InfoColumn(BaseModel):
+    name: str
+    dtype: str
+    non_null: int
+    null: int
+    unique: int
+    memory_usage_bytes: int
+
+class InfoPayload(BaseModel):
+    class_: str | None = None
+    shape: List[int]
+    index: InfoIndex
+    columns: List[InfoColumn]
+    dtypes_summary: dict[str, int]
+
+class DataFrameSamplePayload(BaseModel):
+    data: List[dict]
     columns: List[str]
     shape: List[int]
 
 class StatsPayload(BaseModel):
-    info: str
+    info: InfoPayload | dict # Allow dict for flexibility with raw JSON
     describe: dict
     correlation: dict
-    dataFrameSample: dict
+    dataFrameSample: List[dict] | DataFrameSamplePayload # Allow both formats
 
 class ExecuteCodePayload(BaseModel):
     data_frame: DataFramePayload
@@ -136,24 +164,8 @@ async def stats(payload: DataFramePayload):
 )
 async def generate_pandas_operations(payload: StatsPayload = Body(
     ...,
-    example={
-        "info": "RangeIndex: 36 entries, 0 to 35\nData columns (total 4 columns):\n #   Column  Non-Null Count  Dtype  \n---  ------  --------------  -----  \n 0   Car     36 non-null     object \n 1   Volume  36 non-null     float64\n 2   Weight  36 non-null     int64  \n 3   CO2     36 non-null     int64  \ndtypes: float64(1), int64(2), object(1)",
-        "describe": {
-            "Volume": {"count": 36.0, "mean": 1.611111, "std": 0.388975, "min": 1.0, "25%": 1.275, "50%": 1.6, "75%": 2.0, "max": 2.5},
-            "Weight": {"count": 36.0, "mean": 1292.277778, "std": 240.145928, "min": 790.0, "25%": 1117.5, "50%": 1329.0, "75%": 1482.5, "max": 1746.0},
-            "CO2": {"count": 36.0, "mean": 104.027778, "std": 7.454531, "min": 90.0, "25%": 99.0, "50%": 105.0, "75%": 111.25, "max": 120.0}
-        },
-        "correlation": {
-            "Volume": {"Volume": 1.0, "Weight": 0.758112, "CO2": 0.592082},
-            "Weight": {"Volume": 0.758112, "Weight": 1.0, "CO2": 0.552152},
-            "CO2": {"Volume": 0.592082, "Weight": 0.552152, "CO2": 1.0}
-        },
-        "dataFrameSample": {
-            "data": [{"Car": "Toyoty", "Volume": 1.0, "Weight": 790, "CO2": 90}],
-            "columns": ["Car", "Volume", "Weight", "CO2"],
-            "shape": [1, 4]
-        }
-    }
+    # The example is now omitted as Pydantic will generate one from the models.
+    # If a custom example is needed, it should match the new StatsPayload structure.
 )):
     """
     This endpoint returns a hardcoded list of example pandas operations.
@@ -165,16 +177,95 @@ async def generate_pandas_operations(payload: StatsPayload = Body(
     - `title`: A descriptive title for the chart.
     - `pandas_code`: A string of Python code that generates a chart configuration.
     """
-    # This is a placeholder implementation.
-    # It ignores the payload and returns a hardcoded list of operations as a template.
-    example_operations = [
+    if not client:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI client is not configured. Please set the OPENAI_API_KEY environment variable."
+        )
+
+    # Define the tool for the AI to use (function calling)
+    tools = [
         {
-            "id": "echarts_scatter_weight_co2",
-            "title": "Scatter Plot: Weight vs CO2",
-            "pandas_code": "{'title': {'text': 'Weight vs CO2 Emissions'}, 'xAxis': {'type': 'value', 'name': 'Weight (kg)'}, 'yAxis': {'type': 'value', 'name': 'CO2 (g/km)'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}"
+            "type": "function",
+            "function": {
+                "name": "create_chart_operation",
+                "description": "Generates a single, insightful chart suggestion based on the provided data summary. This function will be called multiple times to suggest several different charts.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "A concise and descriptive title for the chart (e.g., 'CO2 Emissions vs. Vehicle Weight')."
+                        },
+                        "pandas_code": {
+                            "type": "string",
+                            "description": "A string of Python code that will be executed to generate an ECharts configuration dictionary. The code has access to a pandas DataFrame called `df`."
+                        },
+                        "insight": {
+                            "type": "string",
+                            "description": "A brief, insightful comment about what the chart reveals from the data."
+                        }
+                    },
+                    "required": ["title", "pandas_code", "insight"]
+                }
+            }
         }
     ]
-    return {"operations": example_operations}
+
+    # Construct the prompt for the AI
+    system_prompt = """
+    You are an expert data analyst. Your task is to analyze the provided data summary and suggest 3 to 5 insightful visualizations.
+    For each visualization, you MUST use the `create_chart_operation` tool.
+    The goal is to generate a `pandas_code` string for each chart. This string will be executed in a Python environment where `df` (the DataFrame), `pd` (pandas), and `np` (numpy) are already available. Do NOT include any imports.
+    The `pandas_code` MUST evaluate to a Python dictionary that represents an ECharts option configuration.
+
+    **IMPORTANT**: For charts like bar charts that require aggregation (e.g., average, sum, count per category), you MUST perform the aggregation first using pandas and then build the ECharts dictionary.
+
+    --- EXAMPLES ---
+
+    1.  **Scatter Plot Example**:
+        If you want to show the relationship between 'Weight' and 'CO2'.
+        The `pandas_code` string should look like this:
+        "{'title': {'text': 'Weight vs CO2 Emissions'}, 'tooltip': {'trigger': 'item'}, 'xAxis': {'type': 'value', 'name': 'Weight'}, 'yAxis': {'type': 'value', 'name': 'CO2'}, 'series': [{'type': 'scatter', 'symbolSize': 10, 'data': df[['Weight', 'CO2']].values.tolist()}]}"
+
+    2.  **Bar Chart with Aggregation Example**:
+        If you want to show the average 'CO2' for each 'Car' brand.
+        The `pandas_code` string should calculate the average and create the chart config in a single expression, for example using a lambda:
+        "(lambda df_agg: {'title': {'text': 'Average CO2 by Car Brand'}, 'tooltip': {'trigger': 'axis'}, 'xAxis': {'type': 'category', 'data': df_agg['Car'].tolist()}, 'yAxis': {'type': 'value'}, 'series': [{'type': 'bar', 'data': df_agg['CO2'].tolist()}]})(df.groupby('Car')['CO2'].mean().reset_index())"
+
+    --- TASK ---
+    Now, analyze the following data summary and generate your chart suggestions using the `create_chart_operation` tool.
+    """
+
+    user_prompt = f"""
+    Here is a summary of the data to analyze:
+    Info: {json.dumps(payload.info if isinstance(payload.info, dict) else payload.info.model_dump(), indent=2)}
+    Describe (Descriptive Statistics): {json.dumps(payload.describe, indent=2)}
+    Correlation Matrix: {json.dumps(payload.correlation, indent=2)}
+    Data Sample (first 5 rows): {json.dumps(payload.dataFrameSample if isinstance(payload.dataFrameSample, list) else payload.dataFrameSample.model_dump(), indent=2)}
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            tools=tools,
+            tool_choice="auto",
+        )
+
+        operations = []
+        for tool_call in response.choices[0].message.tool_calls or []:
+            args = json.loads(tool_call.function.arguments)
+            pandas_code = args['pandas_code']
+            operations.append({"id": tool_call.id, "title": args['title'], "pandas_code": pandas_code})
+
+        return {"operations": operations}
+    except Exception as e:
+        logging.error(f"Error calling OpenAI or processing response: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate chart operations from AI.")
 
 
 @app.post(
