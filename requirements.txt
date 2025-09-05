@@ -6,3 +6,4 @@ xlrd
 pydantic
 numpy
 fastapi-mcp
+openai

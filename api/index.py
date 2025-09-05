@@ -7,6 +7,8 @@ from pydantic import BaseModel
 import pandas as pd
 import io
 import json
+import os
+import openai
 import logging
 
 from src.utils.execute_pandas import execute_pandas_code
@@ -34,7 +36,7 @@ class DataFrameSchemaPayload(BaseModel):
     shape: List[int]
 
 class DefineChartsPayload(BaseModel):
-    schema: DataFrameSchemaPayload
+    stats: DataFrameSchemaPayload
     operations: List[PandasOperation]
 
 class ExecuteCodePayload(BaseModel):
@@ -51,6 +53,14 @@ class OperationResult(PandasOperation):
 class BuildChartsResponse(BaseModel):
     results: List[OperationResult | PandasOperation] # Allow both for define_charts_template
 
+# --- OpenAI Client Setup ---
+# It's recommended to set the OPENAI_API_KEY as an environment variable
+if os.getenv("OPENAI_API_KEY"):
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    client = openai.OpenAI()
+else:
+    client = None
+    logging.warning("OPENAI_API_KEY environment variable not set. OpenAI-related endpoints will not work.")
 
 app = FastAPI()
 # mcp = FastApiMCP(app,
