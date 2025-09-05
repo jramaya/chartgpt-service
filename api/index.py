@@ -80,11 +80,11 @@ class OperationResult(ChartConfiguration):
     result: Any
 
 class BuildChartsResponse(BaseModel):
-    results: List[OperationResult | ChartConfiguration] # Allow both for define_charts_template
+    executed_charts: List[OperationResult | ChartConfiguration] # Allow both for define_charts_template
 
 class GenerateSummaryPayload(BaseModel):
     stats: StatsPayload
-    build_charts_result: BuildChartsResponse
+    charts_to_summarize: BuildChartsResponse
 
 class ChartAnalytics(BaseModel):
     id: str | int
@@ -349,7 +349,7 @@ async def build_charts(payload: DataFramePandasOperation = Body(
             except Exception as e:
                 logging.warning(f"Skipping operation {op.get('id', 'N/A')} due to an error: {e}")
 
-        return {"results": results}
+        return {"executed_charts": results}
 
     except Exception as e:
         logging.error(f"An unexpected error occurred in build_charts: {e}")
@@ -411,7 +411,7 @@ async def generate_summary(payload: GenerateSummaryPayload):
     {json.dumps(payload.stats.model_dump(), indent=2)}
 
     **Chart Results:**
-    {json.dumps(payload.build_charts_result.model_dump(), indent=2)}
+    {json.dumps(payload.charts_to_summarize.model_dump(), indent=2)} # This payload contains the 'executed_charts' key.
     """
 
     try:
