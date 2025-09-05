@@ -2,7 +2,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Query
 from fastapi.responses import JSONResponse
 from fastapi_mcp import FastApiMCP
-from typing import List, Any
+from typing import List, Any, Dict
 from pydantic import BaseModel
 from enum import Enum
 import pandas as pd
@@ -81,6 +81,20 @@ class OperationResult(ChartConfiguration):
 
 class BuildChartsResponse(BaseModel):
     results: List[OperationResult | ChartConfiguration] # Allow both for define_charts_template
+
+class GenerateSummaryPayload(BaseModel):
+    stats: StatsPayload
+    build_charts_result: BuildChartsResponse
+
+class ChartAnalytics(BaseModel):
+    id: str | int
+    title: str
+    details: str # Markdown string
+
+class GenerateSummaryResponse(BaseModel):
+    stats_summary: str # Markdown string
+    chart_analytics: List[ChartAnalytics]
+
 
 # --- Enums for Query Parameters ---
 class ChartsBackend(str, Enum):
@@ -340,3 +354,89 @@ async def build_charts(payload: DataFramePandasOperation = Body(
     except Exception as e:
         logging.error(f"An unexpected error occurred in build_charts: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post(
+    "/api/generate_summary",
+    operation_id="generate_summary",
+    response_model=GenerateSummaryResponse,
+    summary="Generates a textual summary and analysis of data stats and charts.",
+    description="Receives data statistics and chart results, then uses an AI model to generate a comprehensive markdown summary. The output includes an overall data summary and detailed insights for each chart."
+)
+async def generate_summary(payload: GenerateSummaryPayload):
+    """
+    This endpoint uses an AI to generate a full data analysis report.
+
+    - It receives a payload with statistics about a DataFrame and the results from `/api/build_charts`.
+    - It constructs a prompt for an AI model to act as a data analyst.
+    - The AI is instructed to:
+      1.  Create a high-level summary of the dataset based on the provided stats.
+      2.  For each chart result, provide a detailed analysis including its purpose and the insights derived from it.
+    - The AI's response is structured into a specific JSON object using function calling, which is then returned.
+    """
+    if not client:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI client is not configured. Please set the OPENAI_API_KEY environment variable."
+        )
+
+    system_prompt = """
+    You are a world-class data analyst. Your task is to provide a comprehensive summary and analysis based on the provided data statistics and chart results.
+    You MUST structure your entire response by calling the `create_analysis_summary` function with the generated analysis object.
+
+    Your analysis should have two parts:
+    1.  **stats_summary**: A concise, high-level summary of the dataset in Markdown format. Mention key characteristics like the number of rows and columns, important columns, and any notable patterns from the descriptive statistics or correlation matrix.
+    2.  **chart_analytics**: An array of objects, one for each chart provided in the input. For each chart:
+        -   Use the `id` and `title` from the input.
+        -   Create a `details` string in Markdown format. This string MUST contain two sections:
+            -   `**Purpose:**`: A brief explanation of what the chart is intended to show.
+            -   `**Analysis:**`: A detailed interpretation of the chart's data. Explain what the chart reveals, point out trends, outliers, or significant findings.
+    """
+
+    # Define the tool for the AI to use (function calling)
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "create_analysis_summary",
+                "description": "Formats the complete data analysis summary and chart-by-chart insights into a single JSON object.",
+                "parameters": GenerateSummaryResponse.model_json_schema()
+            }
+        }
+    ]
+
+    user_prompt = f"""
+    Please generate a comprehensive analysis based on the following data.
+
+    **Data Statistics:**
+    {json.dumps(payload.stats.model_dump(), indent=2)}
+
+    **Chart Results:**
+    {json.dumps(payload.build_charts_result.model_dump(), indent=2)}
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            tools=tools,
+            tool_choice={"type": "function", "function": {"name": "create_analysis_summary"}},
+        )
+
+        message = response.choices[0].message
+        if not message.tool_calls:
+            raise HTTPException(status_code=500, detail="AI did not generate the required tool call.")
+
+        tool_call = message.tool_calls[0]
+        if tool_call.function.name == "create_analysis_summary":
+            # The arguments are a JSON string, so we parse it into a dictionary
+            analysis_output = json.loads(tool_call.function.arguments)
+            return analysis_output
+        else:
+            raise HTTPException(status_code=500, detail="AI returned an unexpected function call.")
+
+    except Exception as e:
+        logging.error(f"Error in generate_summary: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate analysis summary from AI: {str(e)}")
