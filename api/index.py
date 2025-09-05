@@ -31,20 +31,17 @@ class DataFramePayload(BaseModel):
     columns: List[str]
     shape: List[int]
 
-class DataFrameSchemaPayload(BaseModel):
-    columns: List[str]
-    shape: List[int]
-
-class DefineChartsPayload(BaseModel):
-    stats: DataFrameSchemaPayload
-    operations: List[PandasOperation]
+class StatsPayload(BaseModel):
+    info: str
+    describe: dict
+    correlation: dict
+    dataFrameSample: dict
 
 class ExecuteCodePayload(BaseModel):
     data_frame: DataFramePayload
     operations: List[PandasOperation]
 
-class DefineChartsResponse(BaseModel):
-    data_frame: DataFramePayload | None = None # Placeholder
+class GeneratePandasOperationsResponse(BaseModel):
     operations: List[PandasOperation]
 
 class OperationResult(PandasOperation):
@@ -131,50 +128,53 @@ async def stats(payload: DataFramePayload):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post(
-    "/api/define_charts_template",
-    operation_id="define_charts_template",
-    response_model=DefineChartsResponse,
-    summary="Defines pandas code operations to generate chart configurations",
-    description="This endpoint receives a DataFrame schema and a list of pandas code operations. It validates the structure and returns a payload template with the same operations, ready to be sent to /api/build_charts after adding the data. It's ideal for preparing a dynamic dashboard build request."
+    "/api/generate_pandas_operations",
+    operation_id="generate_pandas_operations",
+    response_model=GeneratePandasOperationsResponse,
+    summary="Generates a template of pandas operations for charts",
+    description="Receives DataFrame statistics and returns a sample list of pandas operations. This endpoint acts as a placeholder, demonstrating the structure required by the `/api/build_charts` endpoint. The input payload is validated but not used in the current template implementation."
 )
-async def define_charts_template(payload: DefineChartsPayload = Body(
+async def generate_pandas_operations(payload: StatsPayload = Body(
     ...,
     example={
-        "schema": {
-            "columns": ["Car", "Volume", "Weight", "CO2"],
-            "shape": [36, 4]
+        "info": "RangeIndex: 36 entries, 0 to 35\nData columns (total 4 columns):\n #   Column  Non-Null Count  Dtype  \n---  ------  --------------  -----  \n 0   Car     36 non-null     object \n 1   Volume  36 non-null     float64\n 2   Weight  36 non-null     int64  \n 3   CO2     36 non-null     int64  \ndtypes: float64(1), int64(2), object(1)",
+        "describe": {
+            "Volume": {"count": 36.0, "mean": 1.611111, "std": 0.388975, "min": 1.0, "25%": 1.275, "50%": 1.6, "75%": 2.0, "max": 2.5},
+            "Weight": {"count": 36.0, "mean": 1292.277778, "std": 240.145928, "min": 790.0, "25%": 1117.5, "50%": 1329.0, "75%": 1482.5, "max": 1746.0},
+            "CO2": {"count": 36.0, "mean": 104.027778, "std": 7.454531, "min": 90.0, "25%": 99.0, "50%": 105.0, "75%": 111.25, "max": 120.0}
         },
-        "operations": [
-            {
-                "id": "echarts_scatter_weight_co2",
-                "title": "Scatter Plot: Weight vs CO2",
-                "pandas_code": "{'title': {'text': 'Weight vs CO2 Emissions'}, 'xAxis': {'type': 'value', 'name': 'Weight (kg)'}, 'yAxis': {'type': 'value', 'name': 'CO2 (g/km)'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}"
-            }
-        ]
+        "correlation": {
+            "Volume": {"Volume": 1.0, "Weight": 0.758112, "CO2": 0.592082},
+            "Weight": {"Volume": 0.758112, "Weight": 1.0, "CO2": 0.552152},
+            "CO2": {"Volume": 0.592082, "Weight": 0.552152, "CO2": 1.0}
+        },
+        "dataFrameSample": {
+            "data": [{"Car": "Toyoty", "Volume": 1.0, "Weight": 790, "CO2": 90}],
+            "columns": ["Car", "Volume", "Weight", "CO2"],
+            "shape": [1, 4]
+        }
     }
 )):
     """
-    Receives a DataFrame schema and a list of pandas code operations to define a chart build request.
-
-    The `operations` part of the payload should be a list of objects, where each object represents
-    a pandas operation to be executed later by the `build_charts` endpoint.
-
-    The code can either transform the DataFrame (e.g., filtering, sorting) or return a dictionary
-    that represents a chart configuration (e.g., for ECharts).
-
-    - **For DataFrame transformations**, the result will be a JSON representation of the resulting DataFrame.
-    - **For chart configurations**, the result will be the JSON object itself.
-
-    Example Operations:
-    - `df[df['CO2'] < 100]` (Filters the DataFrame)
-    - `df.corr()` (Calculates correlation matrix)
-    - `{'title': {'text': 'Weight vs CO2'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}` (Creates an ECharts scatter plot config)
+    This endpoint returns a hardcoded list of example pandas operations.
+    
+    It serves as a placeholder or template, demonstrating the data structure
+    that would be generated by an AI and is expected by the `/api/build_charts` endpoint.
+    Each operation in the list is a dictionary containing:
+    - `id`: A unique identifier for the chart.
+    - `title`: A descriptive title for the chart.
+    - `pandas_code`: A string of Python code that generates a chart configuration.
     """
-    return {
-        # The data_frame is returned as null. The client should replace this with the actual DataFrame.
-        "data_frame": None,
-        "operations": payload.operations
-    }
+    # This is a placeholder implementation.
+    # It ignores the payload and returns a hardcoded list of operations as a template.
+    example_operations = [
+        {
+            "id": "echarts_scatter_weight_co2",
+            "title": "Scatter Plot: Weight vs CO2",
+            "pandas_code": "{'title': {'text': 'Weight vs CO2 Emissions'}, 'xAxis': {'type': 'value', 'name': 'Weight (kg)'}, 'yAxis': {'type': 'value', 'name': 'CO2 (g/km)'}, 'series': [{'type': 'scatter', 'data': df[['Weight', 'CO2']].values.tolist()}]}"
+        }
+    ]
+    return {"operations": example_operations}
 
 
 @app.post(
