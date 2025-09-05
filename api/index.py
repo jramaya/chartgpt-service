@@ -53,16 +53,16 @@ class BuildChartsResponse(BaseModel):
 
 
 app = FastAPI()
-mcp = FastApiMCP(app,
-    name="Instant Analysis MCP",
-    description="MCP server for data analysis and visualization generation.",
-    describe_all_responses=True,
-    describe_full_response_schema=True,
-    include_operations=["define_charts_template", "read_file", "stats"]
-                 )
+# mcp = FastApiMCP(app,
+#     name="Instant Analysis MCP",
+#     description="MCP server for data analysis and visualization generation.",
+#     describe_all_responses=True,
+#     describe_full_response_schema=True,
+#     include_operations=["define_charts_template", "read_file", "stats"]
+#                  )
 
 # Mount the MCP server
-mcp.mount()
+# mcp.mount()
 
 @app.get("/api/ping")
 def ping():
