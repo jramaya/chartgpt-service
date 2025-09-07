@@ -220,7 +220,7 @@ async def generate_charts_configurations(
         {
             "type": "function",
             "function": {
-                "name": "create_chart_operation",
+                "name": "generate_charts_configuration_response",
                 "description": "Generates a single, insightful chart suggestion based on the provided data summary. This function will be called multiple times to suggest several different charts.",
                 "parameters": {
                     "type": "object",
@@ -397,7 +397,7 @@ async def generate_summary(payload: GenerateSummaryPayload):
         {
             "type": "function",
             "function": {
-                "name": "create_analysis_summary",
+                "name": "generate_summary_response",
                 "description": "Formats the complete data analysis summary and chart-by-chart insights into a single JSON object.",
                 "parameters": GenerateSummaryResponse.model_json_schema()
             }
