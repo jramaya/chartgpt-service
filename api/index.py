@@ -29,6 +29,8 @@ class ChartConfiguration(BaseModel):
     id: str | int
     title: str
     pandas_operation: str
+    chart_type: str
+    insight: str
 
 class DataFramePayload(BaseModel):
     data: List[dict]
@@ -233,12 +235,16 @@ async def generate_charts_configurations(
                             "type": "string",
                             "description": "A string of Python code that will be executed to generate an ECharts configuration dictionary. The code has access to a pandas DataFrame called `df`."
                         },
+                        "chart_type": {
+                            "type": "string",
+                            "description": "The type of chart suggested (e.g., 'bar', 'line', 'pie', 'scatter'). This should correspond to the type used in the ECharts configuration."
+                        },
                         "insight": {
                             "type": "string",
                             "description": "A brief, insightful comment about what the chart reveals from the data."
                         }
                     },
-                    "required": ["title", "pandas_operation", "insight"]
+                    "required": ["title", "pandas_operation", "chart_type", "insight"]
                 }
             }
         }
@@ -266,8 +272,13 @@ async def generate_charts_configurations(
         operations = []
         for tool_call in response.choices[0].message.tool_calls or []:
             args = json.loads(tool_call.function.arguments)
-            pandas_operation = args['pandas_operation']
-            operations.append({"id": tool_call.id, "title": args['title'], "pandas_operation": pandas_operation})
+            operations.append({
+                "id": tool_call.id,
+                "title": args['title'],
+                "pandas_operation": args['pandas_operation'],
+                "chart_type": args['chart_type'],
+                "insight": args['insight']
+            })
 
         return {"operations": operations}
     except Exception as e:
@@ -381,7 +392,7 @@ async def generate_summary(payload: GenerateSummaryPayload):
 
     system_prompt = """
     You are a world-class data analyst. Your task is to provide a comprehensive summary and analysis based on the provided data statistics and chart results.
-    You MUST structure your entire response by calling the `create_analysis_summary` function with the generated analysis object.
+    You MUST structure your entire response by calling the `generate_summary_response` function with the generated analysis object.
 
     Your analysis should have two parts:
     1.  **stats_summary**: A concise, high-level summary of the dataset in Markdown format. Mention key characteristics like the number of rows and columns, important columns, and any notable patterns from the descriptive statistics or correlation matrix.
@@ -422,7 +433,7 @@ async def generate_summary(payload: GenerateSummaryPayload):
                 {"role": "user", "content": user_prompt},
             ],
             tools=tools,
-            tool_choice={"type": "function", "function": {"name": "create_analysis_summary"}},
+            tool_choice={"type": "function", "function": {"name": "generate_summary_response"}},
         )
 
         message = response.choices[0].message
@@ -430,7 +441,7 @@ async def generate_summary(payload: GenerateSummaryPayload):
             raise HTTPException(status_code=500, detail="AI did not generate the required tool call.")
 
         tool_call = message.tool_calls[0]
-        if tool_call.function.name == "create_analysis_summary":
+        if tool_call.function.name == "generate_summary_response":
             # The arguments are a JSON string, so we parse it into a dictionary
             analysis_output = json.loads(tool_call.function.arguments)
             return analysis_output
