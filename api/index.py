@@ -1,5 +1,6 @@
 # api/index.py
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Query
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi_mcp import FastApiMCP
 from typing import List, Any, Dict
@@ -111,6 +112,11 @@ if os.getenv("OPENAI_API_KEY"):
 else:
     client = None
     logging.warning("OPENAI_API_KEY environment variable not set. OpenAI-related endpoints will not work.")
+
+# --- FastAPI App Setup ---
+# The order is important: mount static files first, then define API routes.
+# This ensures that a request to "/" serves index.html, and requests to "/api/..." are handled by the API.
+static_files_path = os.path.join(os.path.dirname(__file__), "..", "public")
 
 app = FastAPI()
 # mcp = FastApiMCP(app,
@@ -451,3 +457,6 @@ async def generate_summary(payload: GenerateSummaryPayload):
     except Exception as e:
         logging.error(f"Error in generate_summary: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate analysis summary from AI: {str(e)}")
+
+# --- Static Files Mount ---
+app.mount("/", StaticFiles(directory=static_files_path, html=True), name="static")
